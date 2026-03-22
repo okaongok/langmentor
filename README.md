@@ -81,5 +81,5 @@ backend/
 
 - **Frontend**: Next.js 16, React 19, Tailwind CSS v4, shadcn/ui
 - **Backend**: Python 3.13+, FastAPI, Pydantic
-- **AI**: LangChain, Alibaba DashScope (qwen3.5-plus)
+- **AI**: LangChain, Alibaba DashScope (qwen-plus)
 - **Package Managers**: npm (frontend), uv (backend)

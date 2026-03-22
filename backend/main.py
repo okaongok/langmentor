@@ -1,15 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from agent import (
-    translate_tool,
-    explain_word_tool,
-    check_grammar_tool,
-    generate_exercise_tool,
-    chat_tool,
-)
 from agent.tools import (
     translate_stream,
     explain_word_stream,
@@ -35,38 +28,16 @@ class TranslationRequest(BaseModel):
     target_lang: str = "zh"
 
 
-class TranslationResponse(BaseModel):
-    word: str
-    translation: str
-    source_lang: str
-    target_lang: str
-
-
 class ExplainRequest(BaseModel):
     word: str
-
-
-class ExplainResponse(BaseModel):
-    word: str
-    explanation: str
 
 
 class GrammarRequest(BaseModel):
     text: str
 
 
-class GrammarResponse(BaseModel):
-    original: str
-    correction: str
-
-
 class ExerciseRequest(BaseModel):
     topic: str = "general"
-
-
-class ExerciseResponse(BaseModel):
-    topic: str
-    exercise: str
 
 
 class ChatMessage(BaseModel):
@@ -77,16 +48,6 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] | None = None
-
-
-class ChatResponse(BaseModel):
-    reply: str
-
-
-async def sse_generator(stream):
-    async for chunk in stream:
-        yield f"data: {chunk}\n\n"
-    yield "data: [DONE]\n\n"
 
 
 @app.post("/api/translate")
