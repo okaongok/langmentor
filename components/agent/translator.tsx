@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import { streamSSE } from "@/lib/stream"
 
 export function Translator() {
@@ -49,7 +50,7 @@ export function Translator() {
       {result && (
         <div className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
           <p className="text-sm text-zinc-500 mb-1">翻译结果</p>
-          <p className="text-lg font-medium">{result}</p>
+          <MarkdownRenderer content={result} />
         </div>
       )}
     </div>

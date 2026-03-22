@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import { streamSSE } from "@/lib/stream"
 
 interface Message {
@@ -77,7 +78,11 @@ export function Chat() {
                   : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
               }`}
             >
-              {msg.content || (loading && i === messages.length - 1 ? "..." : "")}
+              {msg.role === "user" ? (
+                msg.content
+              ) : (
+                <MarkdownRenderer content={msg.content || (loading && i === messages.length - 1 ? "..." : "")} />
+              )}
             </div>
           </div>
         ))}

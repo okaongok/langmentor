@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import { streamSSE } from "@/lib/stream"
 
 export function Vocabulary() {
@@ -45,7 +46,7 @@ export function Vocabulary() {
       {result && (
         <div className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg whitespace-pre-wrap">
           <p className="text-sm text-zinc-500 mb-1">词汇解释</p>
-          <p className="text-sm">{result}</p>
+          <MarkdownRenderer content={result} />
         </div>
       )}
     </div>
