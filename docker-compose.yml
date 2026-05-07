@@ -1,0 +1,238 @@
+version: '3.8'
+
+services:
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: langmentor-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - langmentor-network
+    command: npm run dev
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: langmentor-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - langmentor-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: langmentor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - langmentor-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # MySQL
+  mysql:
+    image: mysql:8.0
+    container_name: langmentor-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: langmentor_db
+      MYSQL_USER: langmentor_user
+      MYSQL_PASSWORD: langmentor_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - langmentor-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ChromaDB (向量数据库)
+  chroma:
+    image: chromadb/chroma:0.4.22
+    container_name: langmentor-chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - langmentor-network
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: api-gateway/Dockerfile
+    container_name: langmentor-api-gateway
+    ports:
+      - "8080:8000"
+    environment:
+      - SERVICE_NAME=api-gateway
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=mysql+pymysql://langmentor_user:langmentor_pass@mysql:3306/langmentor_db
+      - RAG_SERVICE_URL=http://rag-service:8000
+      - LLM_SERVICE_URL=http://llm-service:8000
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - langmentor-network
+    volumes:
+      - ./backend/api-gateway:/app/api-gateway
+      - ./backend/shared:/app/shared
+    command: uvicorn api-gateway.app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # RAG Service
+  rag-service:
+    build:
+      context: ./backend
+      dockerfile: rag-service/Dockerfile
+    container_name: langmentor-rag-service
+    ports:
+      - "8081:8000"
+    environment:
+      - SERVICE_NAME=rag-service
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - DATABASE_URL=mysql+pymysql://langmentor_user:langmentor_pass@mysql:3306/langmentor_db
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    networks:
+      - langmentor-network
+    volumes:
+      - ./backend/rag-service:/app/rag-service
+      - ./backend/shared:/app/shared
+    command: uvicorn rag-service.app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # LLM Service
+  llm-service:
+    build:
+      context: ./backend
+      dockerfile: llm-service/Dockerfile
+    container_name: langmentor-llm-service
+    ports:
+      - "8082:8000"
+    environment:
+      - SERVICE_NAME=llm-service
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DATABASE_URL=mysql+pymysql://langmentor_user:langmentor_pass@mysql:3306/langmentor_db
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - langmentor-network
+    volumes:
+      - ./backend/llm-service:/app/llm-service
+      - ./backend/shared:/app/shared
+    command: uvicorn llm-service.app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: celery-worker/Dockerfile
+    container_name: langmentor-celery-worker
+    environment:
+      - CELERY_BROKER_URL=amqp://admin:admin123@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DATABASE_URL=mysql+pymysql://langmentor_user:langmentor_pass@mysql:3306/langmentor_db
+      - RAG_SERVICE_URL=http://rag-service:8000
+      - LLM_SERVICE_URL=http://llm-service:8000
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - langmentor-network
+    volumes:
+      - ./backend/celery-worker:/app/celery-worker
+      - ./backend/shared:/app/shared
+      - ./backend/rag-service:/app/rag-service
+      - ./backend/llm-service:/app/llm-service
+    command: celery -A celery-worker.tasks worker --loglevel=info --concurrency=2
+
+  # Celery Flower
+  celery-flower:
+    build:
+      context: ./backend
+      dockerfile: celery-worker/Dockerfile
+    container_name: langmentor-celery-flower
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=amqp://admin:admin123@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - celery-worker
+    networks:
+      - langmentor-network
+    command: celery -A celery-worker.tasks flower --port=5555 --broker_api=http://admin:admin123@rabbitmq:15672/api/
+
+networks:
+  langmentor-network:
+    driver: bridge
+
+volumes:
+  rabbitmq_data:
+  redis_data:
+  mysql_data:
+  chroma_data:
+  node_modules:
