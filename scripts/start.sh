@@ -6,6 +6,11 @@ set -e
 cd "$(dirname "$0")/.."
 BASE_DIR=$(pwd)
 
+# 加载 .env 文件
+if [ -f "$BASE_DIR/.env" ]; then
+    export $(grep -v '^#' "$BASE_DIR/.env" | xargs)
+fi
+
 # 环境变量
 export SERVICE_NAME=api-gateway
 export RABBITMQ_URL=amqp://admin:admin123@localhost:5672/

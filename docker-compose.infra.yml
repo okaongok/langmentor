@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  # RabbitMQ 集群节点1
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_ERLANG_COOKIE: langmentor_cluster_cookie
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - langmentor-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Redis 主节点
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - langmentor-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # MySQL 主节点
+  mysql:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: langmentor_db
+      MYSQL_USER: langmentor_user
+      MYSQL_PASSWORD: langmentor_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - langmentor-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ChromaDB
+  chroma:
+    image: chromadb/chroma:0.4.22
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - langmentor-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+
+networks:
+  langmentor-net:
+    external: true
+
+volumes:
+  rabbitmq_data:
+  redis_data:
+  mysql_data:
+  chroma_data:

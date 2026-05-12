@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
@@ -63,6 +64,40 @@ async def chat(request: ChatRequest):
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """流式聊天接口"""
+    async def generate():
+        try:
+            async with httpx.AsyncClient() as client:
+                rag_response = await client.post(
+                    f"{RAG_SERVICE_URL}/retrieve",
+                    json={"query": request.message, "top_k": 3},
+                    timeout=30.0
+                )
+                context = rag_response.json().get("results", [])
+
+                async with httpx.AsyncClient() as client:
+                    async with client.stream(
+                        "POST",
+                        f"{LLM_SERVICE_URL}/generate/stream",
+                        json={
+                            "message": request.message,
+                            "context": context,
+                            "session_id": request.session_id,
+                        },
+                        timeout=60.0
+                    ) as response:
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: "):
+                                yield line + "\n\n"
+
+        except Exception as e:
+            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @app.post("/api/documents")

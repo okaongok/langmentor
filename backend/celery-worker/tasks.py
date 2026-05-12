@@ -1,4 +1,4 @@
-from celery-worker.config import celery_app
+from celery_worker.config import celery_app
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter

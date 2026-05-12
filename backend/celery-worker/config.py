@@ -6,7 +6,7 @@ celery_app = Celery(
     "langmentor",
     broker=os.getenv("CELERY_BROKER_URL", "amqp://admin:admin123@localhost:5672/"),
     backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
-    include=["celery-worker.tasks"]
+    include=["celery_worker.tasks"]
 )
 
 # 可选配置

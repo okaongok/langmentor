@@ -2,18 +2,28 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install uv
+# 使用国内pip镜像源
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
+# 安装依赖
 COPY pyproject.toml .
 COPY README.md .
 
-RUN uv pip install --system -e "."
+RUN pip install --no-cache-dir hatchling
 
-COPY celery-worker/ ./celery-worker/
+RUN pip install --no-cache-dir \
+    fastapi uvicorn[standard] celery redis pika \
+    sqlalchemy pymysql aiomysql alembic \
+    langchain langchain-openai langchain-community \
+    chromadb openai \
+    pydantic pydantic-settings python-dotenv httpx \
+    pytest pytest-asyncio black isort flake8 mypy flower
+
+COPY celery-worker/ ./celery_worker/
 COPY shared/ ./shared/
-COPY rag-service/ ./rag-service/
-COPY llm-service/ ./llm-service/
+COPY rag-service/ ./rag_service/
+COPY llm-service/ ./llm_service/
 
 ENV PYTHONPATH=/app
 
-CMD ["celery", "-A", "celery-worker.tasks", "worker", "--loglevel=info", "--concurrency=2"]
+CMD ["celery", "-A", "celery_worker.tasks", "worker", "--loglevel=info", "--concurrency=2"]

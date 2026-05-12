@@ -2,18 +2,28 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install uv
+# 使用国内pip镜像源
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
+# 安装依赖
 COPY pyproject.toml .
 COPY README.md .
 
-RUN uv pip install --system -e "."
+RUN pip install --no-cache-dir hatchling
 
-COPY llm-service/ ./llm-service/
+RUN pip install --no-cache-dir \
+    fastapi uvicorn[standard] celery redis pika \
+    sqlalchemy pymysql aiomysql alembic \
+    langchain langchain-openai langchain-community \
+    chromadb openai \
+    pydantic pydantic-settings python-dotenv httpx \
+    pytest pytest-asyncio black isort flake8 mypy flower
+
+COPY llm-service/ ./llm_service/
 COPY shared/ ./shared/
 
 ENV PYTHONPATH=/app
 
 EXPOSE 8000
 
-CMD ["uvicorn", "llm-service.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "llm_service.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

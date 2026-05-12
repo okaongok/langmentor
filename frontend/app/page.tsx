@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Send, MessageSquare, BookOpen, Brain } from 'lucide-react';
 
 export default function Home() {
@@ -17,17 +17,49 @@ export default function Home() {
     const userMessage = input.trim();
     setInput('');
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
+    setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMessage }),
       });
 
-      const data = await response.json();
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.response }]);
+      if (!response.ok || !response.body) throw new Error('Network error');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantMessage = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const text = decoder.decode(value);
+        const lines = text.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.content) {
+                assistantMessage += data.content;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = {
+                    role: 'assistant',
+                    content: assistantMessage,
+                  };
+                  return newMessages;
+                });
+                await new Promise(r => setTimeout(r, 30));
+              }
+            } catch {}
+          }
+        }
+      }
     } catch (error) {
       setMessages((prev) => [
         ...prev,

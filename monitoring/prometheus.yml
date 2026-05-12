@@ -1,0 +1,75 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: langmentor
+    replica: '{{.ExternalURL}}'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  # Prometheus自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Nginx监控
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+    metrics_path: /metrics
+
+  # API Gateway监控
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: 
+        - 'api-gateway-1:8000'
+        - 'api-gateway-2:8000'
+    metrics_path: /metrics
+
+  # RAG服务监控
+  - job_name: 'rag-service'
+    static_configs:
+      - targets:
+        - 'rag-service-1:8000'
+        - 'rag-service-2:8000'
+    metrics_path: /metrics
+
+  # LLM服务监控
+  - job_name: 'llm-service'
+    static_configs:
+      - targets:
+        - 'llm-service-1:8000'
+        - 'llm-service-2:8000'
+    metrics_path: /metrics
+
+  # Redis监控
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # MySQL监控
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['mysql-exporter:9104']
+
+  # RabbitMQ监控
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
+  # Node Exporter（主机监控）
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # Cadvisor（容器监控）
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']

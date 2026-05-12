@@ -1,0 +1,210 @@
+version: '3.8'
+
+services:
+  # Nginx 负载均衡器
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: langmentor-nginx:latest
+    ports:
+      - "80:80"
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - langmentor-net
+    depends_on:
+      - api-gateway
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # API Gateway 多实例
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: api-gateway/Dockerfile
+    image: langmentor-api-gateway:latest
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+    environment:
+      - SERVICE_NAME=api-gateway
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=mysql+pymysql://langmentor_user:langmentor_pass@mysql:3306/langmentor_db
+      - RAG_SERVICE_URL=http://rag-service:8000
+      - LLM_SERVICE_URL=http://llm-service:8000
+    networks:
+      - langmentor-net
+    depends_on:
+      - rabbitmq
+      - redis
+      - mysql
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # RAG Service 多实例
+  rag-service:
+    build:
+      context: ./backend
+      dockerfile: rag-service/Dockerfile
+    image: langmentor-rag-service:latest
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+    environment:
+      - SERVICE_NAME=rag-service
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - DATABASE_URL=mysql+pymysql://langmentor_user:langmentor_pass@mysql:3306/langmentor_db
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    networks:
+      - langmentor-net
+    depends_on:
+      - rabbitmq
+      - redis
+      - mysql
+      - chroma
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+  # LLM Service 多实例
+  llm-service:
+    build:
+      context: ./backend
+      dockerfile: llm-service/Dockerfile
+    image: langmentor-llm-service:latest
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+    environment:
+      - SERVICE_NAME=llm-service
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DATABASE_URL=mysql+pymysql://langmentor_user:langmentor_pass@mysql:3306/langmentor_db
+    networks:
+      - langmentor-net
+    depends_on:
+      - rabbitmq
+      - redis
+      - mysql
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+  # Celery Worker 多实例
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: celery-worker/Dockerfile
+    image: langmentor-celery-worker:latest
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+    environment:
+      - CELERY_BROKER_URL=amqp://admin:admin123@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DATABASE_URL=mysql+pymysql://langmentor_user:langmentor_pass@mysql:3306/langmentor_db
+      - RAG_SERVICE_URL=http://rag-service:8000
+      - LLM_SERVICE_URL=http://llm-service:8000
+    networks:
+      - langmentor-net
+    depends_on:
+      - rabbitmq
+      - redis
+      - mysql
+
+  # Celery Flower
+  celery-flower:
+    build:
+      context: ./backend
+      dockerfile: celery-worker/Dockerfile
+    image: langmentor-celery-worker:latest
+    ports:
+      - "5555:5555"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    environment:
+      - CELERY_BROKER_URL=amqp://admin:admin123@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - langmentor-net
+    depends_on:
+      - celery-worker
+    command: celery -A celery-worker.tasks flower --port=5555 --broker_api=http://admin:admin123@rabbitmq:15672/api/
+
+  # 前端多实例
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: langmentor-frontend:latest
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NODE_ENV=production
+    networks:
+      - langmentor-net
+
+networks:
+  langmentor-net:
+    external: true
