@@ -1,6 +1,38 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  
+  --color-background: oklch(100% 0 0);
+  --color-foreground: oklch(15% 0 0);
+  
+  --color-card: oklch(100% 0 0);
+  --color-card-foreground: oklch(15% 0 0);
+  
+  --color-popover: oklch(100% 0 0);
+  --color-popover-foreground: oklch(15% 0 0);
+  
+  --color-primary: oklch(55% 0.25 285);
+  --color-primary-foreground: oklch(98% 0 0);
+  
+  --color-secondary: oklch(96% 0 0);
+  --color-secondary-foreground: oklch(25% 0.05 250);
+  
+  --color-muted: oklch(96% 0 0);
+  --color-muted-foreground: oklch(45% 0.05 250);
+  
+  --color-accent: oklch(96% 0 0);
+  --color-accent-foreground: oklch(25% 0.05 250);
+  
+  --color-destructive: oklch(60% 0.25 25);
+  --color-destructive-foreground: oklch(98% 0 0);
+  
+  --color-border: oklch(90% 0 0);
+  --color-input: oklch(90% 0 0);
+  --color-ring: oklch(55% 0.25 285);
+  
+  --radius: 0.5rem;
+}
 
 :root {
   --foreground-rgb: 0, 0, 0;
@@ -8,12 +40,11 @@
   --background-end-rgb: 255, 255, 255;
 }
 
+* {
+  border-color: var(--color-border);
+}
+
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background-color: var(--color-background);
+  color: var(--color-foreground);
 }
